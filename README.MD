@@ -1,5 +1,31 @@
 # mtl-snowflake
-*multi-timeline-snowflake 基于多时间线改进的snowflake分布式id生成器*  
+*multi-timeline-snowflake 基于多时间线改进的snowflake分布式id生成器*
+
+> **推荐使用 v2 版本** — 性能更优、文档更完善、API 更友好。详见 [v2/README.MD](v2/README.MD)
+
+## v2 主要改进
+
+| 特性 | v1 | v2 |
+|------|----|----|
+| 默认 Epoch | 2015.6.10 | 2025-01-01 (可用69年) |
+| 可读格式 | 仅一种 | 多种格式 (YYYYMMDDHHMMSS等) |
+| ID解析 | 无 | Decompose() 方法 |
+| 机器ID获取 | 手动配置 | GetMachineIDFromPodName() 自动获取 |
+| 性能 | - | Generate: 249ns/op, 0 allocs |
+| 文档 | 简要 | 完整算法详解、场景推荐、配置决策树 |
+
+**快速迁移到 v2**:
+```go
+import mtl "github.com/ciumc/mtl-snowflake/v2"
+
+gen, _ := mtl.NewGenerator(0)
+id, _ := gen.Generate()
+readable := gen.ToReadableWithFormat(id, mtl.FormatYYYYMMDDHHMMSS)
+```
+
+---
+
+## v1 说明
 
   - snowflake(雪花)算法是twitter开源的分布式id生成算法，主要优点有：
     - 极少依赖(仅依赖系统时钟)
