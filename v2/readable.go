@@ -5,7 +5,7 @@ import (
 )
 
 // ToReadable 将ID转换为可读格式（默认使用 FormatYYYYMMDDHHMMSS）
-func (g *IDGenerator) ToReadable(id int64) string {
+func (g *IDGenerator) ToReadable(id int64) (string, error) {
 	return g.ToReadableWithFormat(id, FormatYYYYMMDDHHMMSS)
 }
 
@@ -13,14 +13,12 @@ func (g *IDGenerator) ToReadable(id int64) string {
 // format 指定时间前缀精度，返回固定长度的数字字符串
 // 输出时间使用系统本地时区
 // 注意：此方法仅支持默认配置 (MachineIDBit=9, TimelineBit=1, SeqBit=12)
-func (g *IDGenerator) ToReadableWithFormat(id int64, format ReadableFormat) string {
+func (g *IDGenerator) ToReadableWithFormat(id int64, format ReadableFormat) (string, error) {
 	s := g.settings
 
 	// 验证配置兼容性（编码常量仅支持默认配置）
 	if !g.isReadableCompatible() {
-		// 对于不兼容的配置，返回空字符串或抛出 panic
-		// 这里选择 panic 以明确告知用户配置错误
-		panic(ErrIncompatibleSettings)
+		return "", ErrIncompatibleSettings
 	}
 
 	// 解析ID各部分
@@ -91,7 +89,7 @@ func (g *IDGenerator) ToReadableWithFormat(id int64, format ReadableFormat) stri
 		writeInt10(&buf, &pos, encodedSuffix)
 	}
 
-	return string(buf[:bufLen])
+	return string(buf[:bufLen]), nil
 }
 
 // writeInt2 写入2位数字（补零）
@@ -164,6 +162,13 @@ func (g *IDGenerator) FromReadable(readable string, format ReadableFormat) (int6
 	expectedLen := expectedLength(format)
 	if len(readable) != expectedLen {
 		return 0, ErrInvalidReadableFormat
+	}
+
+	// 验证纯数字
+	for _, c := range readable {
+		if c < '0' || c > '9' {
+			return 0, ErrInvalidReadableFormat
+		}
 	}
 
 	// 提取第一段和第二段

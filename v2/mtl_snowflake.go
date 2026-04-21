@@ -7,11 +7,10 @@
 //
 //	gen, _ := mtl_snowflake.NewGenerator(0)
 //	id, _ := gen.Generate()
-//	readable := gen.ToReadableWithFormat(id, mtl_snowflake.FormatYYYYMMDDHHMMSS)
+//	readable, _ := gen.ToReadableWithFormat(id, mtl_snowflake.FormatYYYYMMDDHHMMSS)
 package mtl_snowflake
 
 import (
-	"math/rand"
 	"sync"
 	"time"
 )
@@ -50,10 +49,10 @@ func NewGeneratorWithSettings(machineID int64, settings Settings) (*IDGenerator,
 	// 初始化时间线进度
 	timelineProgress := make([]int64, settings.timelineCount)
 
-	// 随机选择初始时间线
+	// 选择初始时间线
 	curTimeline := int64(0)
 	if settings.timelineCount > 1 {
-		curTimeline = rand.Int63n(settings.timelineCount)
+		curTimeline = time.Now().UnixNano() % settings.timelineCount
 	}
 
 	return &IDGenerator{
@@ -73,20 +72,21 @@ func (g *IDGenerator) Generate() (int64, error) {
 
 	// 获取当前时间偏移
 	curTime := (time.Now().UnixNano() - s.Epoch) / timeUnit
-	progress := g.timelineProgress[g.curTimeline]
 
 	// 处理时钟回退
-	if curTime < progress {
+	if curTime < g.timelineProgress[g.curTimeline] {
 		if curTime < 0 {
 			return 0, ErrTimeBackwardTooFar
 		}
 
-		// 小幅回退：等待时间追回
-		if progress - curTime <= maxWaitTime {
-			time.Sleep(time.Duration(progress - curTime) * time.Millisecond)
+		// 小幅回退：尝试等待时间追回
+		if g.timelineProgress[g.curTimeline]-curTime <= maxWaitTime {
+			time.Sleep(time.Duration(g.timelineProgress[g.curTimeline]-curTime) * time.Millisecond)
 			curTime = (time.Now().UnixNano() - s.Epoch) / timeUnit
-		} else {
-			// 大幅回退：切换时间线
+		}
+
+		// 等待后仍回退或大幅回退：切换时间线
+		if curTime < g.timelineProgress[g.curTimeline] {
 			if s.timelineCount == 1 {
 				return 0, ErrNoAvailableTimeline
 			}
@@ -96,15 +96,15 @@ func (g *IDGenerator) Generate() (int64, error) {
 			var foundTimeline int64 = -1
 			if s.timelineCount == 2 {
 				otherTimeline := 1 - g.curTimeline
-				if g.timelineProgress[otherTimeline] < curTime {
+				if g.timelineProgress[otherTimeline] <= curTime {
 					foundTimeline = otherTimeline
 				}
 			} else {
-				// 多时间线：遍历查找最快的
+				// 多时间线：遍历查找
 				for i, p := range g.timelineProgress {
-					if p < curTime {
+					if p <= curTime {
 						foundTimeline = int64(i)
-						break // 找到第一个即可（都是初始化为0）
+						break
 					}
 				}
 			}
@@ -112,14 +112,14 @@ func (g *IDGenerator) Generate() (int64, error) {
 				return 0, ErrNoAvailableTimeline
 			}
 
-			// 切换时间线
-			g.timelineProgress[g.curTimeline] = curTime
+			// 切换时间线（不修改旧时间线进度，防止重复ID）
 			g.curTimeline = foundTimeline
 		}
 	}
 
 	// 序列号处理
 	// 同一毫秒：递增序列号；否则重置为0
+	progress := g.timelineProgress[g.curTimeline]
 	if curTime == progress {
 		if g.seq = (g.seq + 1) & s.seqMask; g.seq == 0 {
 			// 序列号用完，精确等待下一毫秒

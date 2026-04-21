@@ -307,6 +307,59 @@ func TestTimeBackward(t *testing.T) {
 	}
 }
 
+func TestTimeBackwardTimelineProgressNotReverted(t *testing.T) {
+	// 验证：大幅时钟回退切换时间线时，旧时间线进度不应被降低
+	// 否则切回旧时间线后会重新使用已用时间戳，导致重复ID
+	settings := Settings{
+		TimeBit:      41,
+		MachineIDBit: 9,
+		TimelineBit:  1,
+		SeqBit:       12,
+		Epoch:        DefaultEpoch,
+	}
+	gen, err := NewGeneratorWithSettings(0, settings)
+	if err != nil {
+		t.Fatalf("NewGenerator failed: %v", err)
+	}
+
+	// 生成一个ID以初始化时间线进度
+	_, err = gen.Generate()
+	if err != nil {
+		t.Fatalf("Initial Generate failed: %v", err)
+	}
+
+	// 记录当前时间线进度
+	gen.mutex.Lock()
+	curTL := gen.curTimeline
+	progressBefore := gen.timelineProgress[curTL]
+	gen.mutex.Unlock()
+
+	// 模拟大幅时钟回退（推进进度100ms，然后尝试生成）
+	gen.mutex.Lock()
+	gen.timelineProgress[curTL] = progressBefore + 100
+	gen.mutex.Unlock()
+
+	_, err = gen.Generate()
+	if err != nil {
+		// 如果没有可用时间线则跳过
+		t.Skipf("no available timeline: %v", err)
+	}
+
+	// 验证：旧时间线进度不应被降低
+	gen.mutex.Lock()
+	progressAfter := gen.timelineProgress[curTL]
+	curTLAfter := gen.curTimeline
+	gen.mutex.Unlock()
+
+	// 切换到另一条时间线后，旧时间线进度应保持不变
+	if curTLAfter != curTL {
+		if progressAfter < progressBefore+100 {
+			t.Errorf("timeline %d progress was reverted: before=%d, after=%d, should not decrease",
+				curTL, progressBefore+100, progressAfter)
+		}
+	}
+}
+
 func TestDecomposeDetailed(t *testing.T) {
 	settings := Settings{
 		TimeBit:      41,
@@ -399,7 +452,7 @@ func TestToReadable(t *testing.T) {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	readable := gen.ToReadable(id)
+	readable, err := gen.ToReadable(id)
 
 	// 验证格式：YYYYMMDDHHMMSS + mss(3位毫秒) + 序列号部分
 	// 例如：20250416123456000001 (时间14位 + 毫秒3位 + 序列号)
@@ -431,7 +484,10 @@ func TestToReadableFormat(t *testing.T) {
 			t.Fatalf("Generate failed: %v", err)
 		}
 
-		readable := gen.ToReadable(id)
+		readable, err := gen.ToReadable(id)
+		if err != nil {
+			t.Fatalf("ToReadable failed: %v", err)
+		}
 
 		// 格式应该是：YYYYMMDDHHMMSS + mss(毫秒3位) + 序列号
 		// 例如：2025041612345600000001

@@ -60,7 +60,11 @@ func basicExample() {
 			fmt.Printf("    生成失败: %v\n", err)
 			continue
 		}
-		readable := idGen.ToReadableWithFormat(id, mtl.FormatYYYYMMDDHHMMSS)
+		readable, err := idGen.ToReadableWithFormat(id, mtl.FormatYYYYMMDDHHMMSS)
+		if err != nil {
+			fmt.Printf("    转换失败: %v\n", err)
+			continue
+		}
 		fmt.Printf("    ID=%d, 可读=%s\n", id, readable)
 	}
 	fmt.Println()
@@ -227,7 +231,11 @@ func decomposeExample() {
 		return
 	}
 	info := gen.Decompose(id)
-	readable := gen.ToReadableWithFormat(id, mtl.FormatYYYYMMDDHHMMSS)
+	readable, err := gen.ToReadableWithFormat(id, mtl.FormatYYYYMMDDHHMMSS)
+	if err != nil {
+		fmt.Printf("  转换失败: %v\n", err)
+		return
+	}
 
 	fmt.Printf("  ID: %d\n", id)
 	fmt.Printf("  可读格式: %s\n", readable)
@@ -315,7 +323,11 @@ func productionExample() {
 			continue
 		}
 		info := idGen.Decompose(id)
-		readable := idGen.ToReadableWithFormat(id, mtl.FormatYYYYMMDDHHMMSS)
+		readable, err := idGen.ToReadableWithFormat(id, mtl.FormatYYYYMMDDHHMMSS)
+		if err != nil {
+			fmt.Printf("      转换失败: %v\n", err)
+			continue
+		}
 		fmt.Printf("      ID=%d, 可读=%s, MachineID=%d\n", id, readable, info.MachineID)
 	}
 	fmt.Println()

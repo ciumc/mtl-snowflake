@@ -1,6 +1,7 @@
 package mtl_snowflake
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -25,7 +26,11 @@ func TestToReadableReversible(t *testing.T) {
 	}
 
 	for _, format := range formats {
-		readable := gen.ToReadableWithFormat(id, format)
+		readable, err := gen.ToReadableWithFormat(id, format)
+		if err != nil {
+			t.Errorf("ToReadableWithFormat failed for format %d: %v", format, err)
+			continue
+		}
 		recoveredID, err := gen.FromReadable(readable, format)
 		if err != nil {
 			t.Errorf("FromReadable failed for format %d: %v, readable=%s", format, err, readable)
@@ -61,7 +66,7 @@ func TestToReadableFormatLength(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		readable := gen.ToReadableWithFormat(id, tt.format)
+		readable, _ := gen.ToReadableWithFormat(id, tt.format)
 		if len(readable) != tt.expectedLen {
 			t.Errorf("Format %d: expected length %d, got %d, readable=%s",
 				tt.format, tt.expectedLen, len(readable), readable)
@@ -92,6 +97,8 @@ func TestFromReadableInvalid(t *testing.T) {
 		{"year out of range YY", "95082412345678901234", FormatYYMMDD, true},
 		{"invalid month", "25002412345678901234", FormatYYMMDD, true},
 		{"invalid day", "25083212345678901234", FormatYYMMDD, true},
+		{"non-digit characters", "25AB3112345678901234", FormatYYMMDD, true},
+		{"letters in suffix", "25083112345678AB1234", FormatYYMMDD, true},
 	}
 
 	for _, tt := range tests {
@@ -117,8 +124,14 @@ func TestToReadableMultipleIDs(t *testing.T) {
 			t.Fatalf("Generate failed: %v", err)
 		}
 
-		readableYY := gen.ToReadableWithFormat(id, FormatYYMMDD)
-		readableYYYY := gen.ToReadableWithFormat(id, FormatYYYYMMDD)
+		readableYY, err := gen.ToReadableWithFormat(id, FormatYYMMDD)
+		if err != nil {
+			t.Fatalf("ToReadableWithFormat failed: %v", err)
+		}
+		readableYYYY, err := gen.ToReadableWithFormat(id, FormatYYYYMMDD)
+		if err != nil {
+			t.Fatalf("ToReadableWithFormat failed: %v", err)
+		}
 
 		// YYYY格式应包含YY格式的前缀（去掉前两位"20"）
 		if readableYYYY[2:8] != readableYY[:6] {
@@ -151,7 +164,7 @@ func BenchmarkToReadableWithFormat(b *testing.B) {
 func BenchmarkFromReadable(b *testing.B) {
 	gen, _ := NewGenerator(123)
 	id, _ := gen.Generate()
-	readable := gen.ToReadableWithFormat(id, FormatYYYYMMDD)
+	readable, _ := gen.ToReadableWithFormat(id, FormatYYYYMMDD)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -178,14 +191,15 @@ func TestIncompatibleSettings(t *testing.T) {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	// ToReadable 应该 panic
-	t.Run("ToReadable panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("ToReadableWithFormat did not panic for incompatible settings")
-			}
-		}()
-		gen.ToReadableWithFormat(id, FormatYYYYMMDD)
+	// ToReadable 应该返回 error 而非 panic
+	t.Run("ToReadable error", func(t *testing.T) {
+		_, err := gen.ToReadableWithFormat(id, FormatYYYYMMDD)
+		if err == nil {
+			t.Errorf("ToReadableWithFormat did not return error for incompatible settings")
+		}
+		if !errors.Is(err, ErrIncompatibleSettings) {
+			t.Errorf("error = %v, want %v", err, ErrIncompatibleSettings)
+		}
 	})
 
 	// FromReadable 应该返回错误
