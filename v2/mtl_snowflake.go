@@ -171,3 +171,14 @@ func (g *IDGenerator) GetMachineID() int64 {
 func (g *IDGenerator) GetSettings() Settings {
 	return *g.settings
 }
+
+// MustGenerate 生成ID，出错时panic
+// 适用于初始化阶段或确定不会出错的场景
+// 可能panic的错误：ErrTimeBackwardTooFar, ErrNoAvailableTimeline
+func (g *IDGenerator) MustGenerate() int64 {
+	id, err := g.Generate()
+	if err != nil {
+		panic(err)
+	}
+	return id
+}

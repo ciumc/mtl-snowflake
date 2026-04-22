@@ -211,3 +211,197 @@ func TestIncompatibleSettings(t *testing.T) {
 		}
 	})
 }
+
+func TestMustToReadable(t *testing.T) {
+	gen, err := NewGenerator(123)
+	if err != nil {
+		t.Fatalf("NewGenerator failed: %v", err)
+	}
+	id, err := gen.Generate()
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	// 成功路径
+	readable := gen.MustToReadable(id)
+	if len(readable) != 24 {
+		t.Errorf("MustToReadable length = %d, want 24", len(readable))
+	}
+}
+
+func TestMustToReadableWithFormat(t *testing.T) {
+	gen, err := NewGenerator(123)
+	if err != nil {
+		t.Fatalf("NewGenerator failed: %v", err)
+	}
+	id, err := gen.Generate()
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	// 成功路径：所有格式
+	formats := []ReadableFormat{FormatYYMMDD, FormatYYYYMMDD, FormatYYMMDDHHMMSS, FormatYYYYMMDDHHMMSS}
+	expectedLens := []int{21, 23, 22, 24}
+	for i, format := range formats {
+		readable := gen.MustToReadableWithFormat(id, format)
+		if len(readable) != expectedLens[i] {
+			t.Errorf("MustToReadableWithFormat format %d: length = %d, want %d", format, len(readable), expectedLens[i])
+		}
+	}
+}
+
+func TestMustFromReadable(t *testing.T) {
+	gen, err := NewGenerator(123)
+	if err != nil {
+		t.Fatalf("NewGenerator failed: %v", err)
+	}
+
+	// 所有格式的 round-trip: MustToReadableWithFormat → MustFromReadable
+	formats := []ReadableFormat{FormatYYMMDD, FormatYYYYMMDD, FormatYYMMDDHHMMSS, FormatYYYYMMDDHHMMSS}
+	for _, format := range formats {
+		id, err := gen.Generate()
+		if err != nil {
+			t.Fatalf("Generate failed: %v", err)
+		}
+
+		readable := gen.MustToReadableWithFormat(id, format)
+		recovered := gen.MustFromReadable(readable, format)
+		if recovered != id {
+			t.Errorf("MustFromReadable format %d: recovered=%d, want=%d, readable=%s", format, recovered, id, readable)
+		}
+	}
+}
+
+func TestMustToReadablePanic(t *testing.T) {
+	// 不兼容配置 → panic
+	settings := Settings{
+		TimeBit:      41,
+		MachineIDBit: 6,
+		TimelineBit:  1,
+		SeqBit:       15,
+		Epoch:        DefaultEpoch,
+	}
+	gen, err := NewGeneratorWithSettings(0, settings)
+	if err != nil {
+		t.Fatalf("NewGeneratorWithSettings failed: %v", err)
+	}
+	id, err := gen.Generate()
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	t.Run("MustToReadable panic", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatalf("MustToReadable did not panic for incompatible settings")
+			}
+			err, ok := r.(error)
+			if !ok {
+				t.Fatalf("MustToReadable panicked with non-error: %T", r)
+			}
+			if !errors.Is(err, ErrIncompatibleSettings) {
+				t.Fatalf("MustToReadable panicked with wrong error: %v, want %v", err, ErrIncompatibleSettings)
+			}
+		}()
+		gen.MustToReadable(id)
+	})
+
+	t.Run("MustToReadableWithFormat panic", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatalf("MustToReadableWithFormat did not panic for incompatible settings")
+			}
+			err, ok := r.(error)
+			if !ok {
+				t.Fatalf("MustToReadableWithFormat panicked with non-error: %T", r)
+			}
+			if !errors.Is(err, ErrIncompatibleSettings) {
+				t.Fatalf("MustToReadableWithFormat panicked with wrong error: %v, want %v", err, ErrIncompatibleSettings)
+			}
+		}()
+		gen.MustToReadableWithFormat(id, FormatYYYYMMDD)
+	})
+}
+
+func TestMustFromReadablePanic(t *testing.T) {
+	// 不兼容配置 → panic
+	settings := Settings{
+		TimeBit:      41,
+		MachineIDBit: 6,
+		TimelineBit:  1,
+		SeqBit:       15,
+		Epoch:        DefaultEpoch,
+	}
+	gen, err := NewGeneratorWithSettings(0, settings)
+	if err != nil {
+		t.Fatalf("NewGeneratorWithSettings failed: %v", err)
+	}
+
+	t.Run("incompatible settings", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatalf("MustFromReadable did not panic for incompatible settings")
+			}
+			err, ok := r.(error)
+			if !ok {
+				t.Fatalf("MustFromReadable panicked with non-error: %T", r)
+			}
+			if !errors.Is(err, ErrIncompatibleSettings) {
+				t.Fatalf("MustFromReadable panicked with wrong error: %v, want %v", err, ErrIncompatibleSettings)
+			}
+		}()
+		gen.MustFromReadable("202504171200001234567890", FormatYYYYMMDD)
+	})
+
+	// 兼容配置但无效输入 → panic
+	gen2, err := NewGenerator(123)
+	if err != nil {
+		t.Fatalf("NewGenerator failed: %v", err)
+	}
+	t.Run("invalid format", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatalf("MustFromReadable did not panic for invalid format")
+			}
+			err, ok := r.(error)
+			if !ok {
+				t.Fatalf("MustFromReadable panicked with non-error: %T", r)
+			}
+			if !errors.Is(err, ErrInvalidReadableFormat) {
+				t.Fatalf("MustFromReadable panicked with wrong error: %v, want %v", err, ErrInvalidReadableFormat)
+			}
+		}()
+		gen2.MustFromReadable("INVALID", FormatYYYYMMDD)
+	})
+}
+
+func TestMustChainRoundTrip(t *testing.T) {
+	// 纯 Must* 链路 round-trip
+	gen, err := NewGenerator(42)
+	if err != nil {
+		t.Fatalf("NewGenerator failed: %v", err)
+	}
+
+	// MustGenerate → MustToReadable → MustFromReadable
+	id := gen.MustGenerate()
+	readable := gen.MustToReadable(id)
+	recovered := gen.MustFromReadable(readable, FormatYYYYMMDDHHMMSS)
+	if recovered != id {
+		t.Errorf("Must chain round-trip failed: recovered=%d, want=%d", recovered, id)
+	}
+
+	// MustGenerate → MustToReadableWithFormat → MustFromReadable（所有格式）
+	formats := []ReadableFormat{FormatYYMMDD, FormatYYYYMMDD, FormatYYMMDDHHMMSS, FormatYYYYMMDDHHMMSS}
+	for _, format := range formats {
+		id2 := gen.MustGenerate()
+		readable2 := gen.MustToReadableWithFormat(id2, format)
+		recovered2 := gen.MustFromReadable(readable2, format)
+		if recovered2 != id2 {
+			t.Errorf("Must chain round-trip format %d: recovered=%d, want=%d", format, recovered2, id2)
+		}
+	}
+}

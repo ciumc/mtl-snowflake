@@ -136,18 +136,6 @@ func encodeShort(ms, machineID, timeline, seq int64) int64 {
 	return ms*encodeMultiplierM + machineID*encodeMultiplierS1 + timeline*encodeMultiplierS2 + seq
 }
 
-// suffixLength 返回后缀长度
-func suffixLength(format ReadableFormat) int {
-	switch format {
-	case FormatYYMMDD, FormatYYYYMMDD:
-		return 15
-	case FormatYYMMDDHHMMSS, FormatYYYYMMDDHHMMSS:
-		return 10
-	default:
-		return 15
-	}
-}
-
 // FromReadable 从可读格式还原原始ID
 // 注意：此方法仅支持默认配置 (MachineIDBit=9, TimelineBit=1, SeqBit=12)
 func (g *IDGenerator) FromReadable(readable string, format ReadableFormat) (int64, error) {
@@ -351,4 +339,34 @@ func parseSuffix(s string) int64 {
 func (g *IDGenerator) isReadableCompatible() bool {
 	s := g.settings
 	return s.MachineIDBit == 9 && s.TimelineBit == 1 && s.SeqBit == 12
+}
+
+// MustToReadable 将ID转换为可读格式（默认使用 FormatYYYYMMDDHHMMSS），出错时panic
+// 可能panic的错误：ErrIncompatibleSettings
+func (g *IDGenerator) MustToReadable(id int64) string {
+	s, err := g.ToReadable(id)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+// MustToReadableWithFormat 将ID转换为可读格式，出错时panic
+// 可能panic的错误：ErrIncompatibleSettings
+func (g *IDGenerator) MustToReadableWithFormat(id int64, format ReadableFormat) string {
+	s, err := g.ToReadableWithFormat(id, format)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+// MustFromReadable 从可读格式还原原始ID，出错时panic
+// 可能panic的错误：ErrIncompatibleSettings, ErrInvalidReadableFormat, ErrInvalidReadableValue, ErrYearOutOfRange
+func (g *IDGenerator) MustFromReadable(readable string, format ReadableFormat) int64 {
+	id, err := g.FromReadable(readable, format)
+	if err != nil {
+		panic(err)
+	}
+	return id
 }

@@ -13,16 +13,15 @@ type Settings struct {
 	Epoch        int64  // 基准时间（纳秒）
 
 	// 预计算字段（内部使用，初始化后自动填充）
-	timeMax        int64  // 时间戳最大值 (2^TimeBit - 1)
-	machineIDMax   int64  // 机器ID最大值 (2^MachineIDBit - 1)
-	timelineCount  int64  // 时间线数量 (2^TimelineBit)
-	timelineMax    int64  // 时间线最大值 (2^TimelineBit - 1)
-	seqMax         int64  // 序列号最大值 (2^SeqBit - 1)
-	seqMask        int64  // 序列号掩码，用于快速循环
-	timeShift      uint64 // 时间戳左移位数
-	machineShift   uint64 // 机器ID左移位数
-	timelineShift  uint64 // 时间线左移位数
-	inTimeMax      int64  // 时间内最大值（MachineID + Timeline + Seq）
+	timeMax       int64  // 时间戳最大值 (2^TimeBit - 1)
+	machineIDMax  int64  // 机器ID最大值 (2^MachineIDBit - 1)
+	timelineCount int64  // 时间线数量 (2^TimelineBit)
+	timelineMax   int64  // 时间线最大值 (2^TimelineBit - 1)
+	seqMax        int64  // 序列号最大值 (2^SeqBit - 1)
+	seqMask       int64  // 序列号掩码，用于快速循环
+	timeShift     uint64 // 时间戳左移位数
+	machineShift  uint64 // 机器ID左移位数
+	timelineShift uint64 // 时间线左移位数
 }
 
 // DefaultEpoch 默认基准时间 2025-01-01 00:00:00 UTC
@@ -81,7 +80,4 @@ func (s *Settings) initPresets() {
 	s.timeShift = s.MachineIDBit + s.TimelineBit + s.SeqBit
 	s.machineShift = s.TimelineBit + s.SeqBit
 	s.timelineShift = s.SeqBit
-
-	// 预计算 ToReadable 参数
-	s.inTimeMax = (1 << s.timeShift) - 1
 }

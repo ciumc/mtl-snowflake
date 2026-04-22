@@ -113,9 +113,9 @@ func TestNewGenerator(t *testing.T) {
 func TestNewGeneratorWithSettings(t *testing.T) {
 	tests := []struct {
 		name      string
-		machineID  int64
-		settings   Settings
-		wantErr    error
+		machineID int64
+		settings  Settings
+		wantErr   error
 	}{
 		{
 			name:      "valid custom settings",
@@ -560,7 +560,7 @@ func TestGetMachineID(t *testing.T) {
 		t.Fatalf("GetMachineID failed: %v", err)
 	}
 
-	maxMachineID := int64(1 << machineIDBit) - 1
+	maxMachineID := int64(1<<machineIDBit) - 1
 	if id1 < 0 || id1 > maxMachineID {
 		t.Errorf("machineID = %d, out of range [0, %d]", id1, maxMachineID)
 	}
@@ -593,7 +593,7 @@ func TestGetMachineIDDifferentBits(t *testing.T) {
 				t.Fatalf("GetMachineID failed: %v", err)
 			}
 
-			max := int64(1 << tt.machineIDBit) - 1
+			max := int64(1<<tt.machineIDBit) - 1
 			if id < 0 || id > max {
 				t.Errorf("machineID = %d, out of range [0, %d]", id, max)
 			}
@@ -822,4 +822,55 @@ func BenchmarkGenerateSeqBit21(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		gen.Generate()
 	}
+}
+
+func TestMustGenerate(t *testing.T) {
+	gen, err := NewGenerator(0)
+	if err != nil {
+		t.Fatalf("NewGenerator failed: %v", err)
+	}
+
+	// 成功路径：应返回正数ID，不panic
+	id := gen.MustGenerate()
+	if id <= 0 {
+		t.Errorf("MustGenerate returned %d, want positive", id)
+	}
+}
+
+func TestMustGeneratePanic(t *testing.T) {
+	// 单时间线 + 强制进度推进 → 无可用时间线 → panic
+	settings := Settings{
+		TimeBit:      41,
+		MachineIDBit: 10,
+		TimelineBit:  0,
+		SeqBit:       12,
+		Epoch:        DefaultEpoch,
+	}
+	gen, err := NewGeneratorWithSettings(0, settings)
+	if err != nil {
+		t.Fatalf("NewGeneratorWithSettings failed: %v", err)
+	}
+
+	// 先生成一个ID初始化进度
+	gen.MustGenerate()
+
+	// 强制推进进度，模拟时钟回退
+	gen.mutex.Lock()
+	gen.timelineProgress[gen.curTimeline] += 100
+	gen.mutex.Unlock()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("MustGenerate did not panic when no available timeline")
+		}
+		err, ok := r.(error)
+		if !ok {
+			t.Fatalf("MustGenerate panicked with non-error: %T", r)
+		}
+		if !errors.Is(err, ErrNoAvailableTimeline) {
+			t.Fatalf("MustGenerate panicked with wrong error: %v, want %v", err, ErrNoAvailableTimeline)
+		}
+	}()
+	gen.MustGenerate()
 }
